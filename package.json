@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Backtesting engine for forex using OANDA API",
   "type": "module",
-  "main": "src/index.js",
+  "main": "src/server.js",
   "scripts": {
     "backtest": "node src/index.js",
     "compare": "node src/compare.js",
