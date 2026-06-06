@@ -148,6 +148,11 @@ td { padding:6px 8px; border-bottom:1px solid #21262d; }
         <div id="chart"></div>
       </div>
 
+      <div class="card" style="padding:8px">
+        <h3 style="font-size:11px;text-transform:uppercase;color:#8b949e;margin-bottom:6px">P&L / Equity</h3>
+        <div id="plChart" style="height:200px"></div>
+      </div>
+
       <div class="tab">
         <button class="active" onclick="switchTab('trades',this)">Trades</button>
         <button onclick="switchTab('config',this)">Config Salva</button>
@@ -176,6 +181,7 @@ td { padding:6px 8px; border-bottom:1px solid #21262d; }
 
 <script>
 let chart, candleSeries, smaFastLine, smaSlowLine, markers = []
+let plChart, equityLine, plLine
 
 function initChart() {
   chart = LightweightCharts.createChart(document.getElementById('chart'), {
@@ -191,6 +197,16 @@ function initChart() {
   })
   smaFastLine = chart.addLineSeries({ color:'#58a6ff', lineWidth:2, title:'SMA Fast' })
   smaSlowLine = chart.addLineSeries({ color:'#d29922', lineWidth:2, title:'SMA Slow' })
+
+  plChart = LightweightCharts.createChart(document.getElementById('plChart'), {
+    layout: { background:{color:'#0d1117'}, textColor:'#8b949e' },
+    grid: { vertLines:{color:'#21262d'}, horzLines:{color:'#21262d'} },
+    timeScale: { timeVisible:true, borderColor:'#30363d' },
+    rightPriceScale: { borderColor:'#30363d' },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal }
+  })
+  equityLine = plChart.addLineSeries({ color:'#3fb950', lineWidth:2, title:'Equity' })
+  plLine = plChart.addAreaSeries({ color:'#58a6ff', lineWidth:1, title:'P&L Acumulado', lineColor:'#58a6ff', topColor:'rgba(88,166,255,0.2)', bottomColor:'rgba(88,166,255,0)' })
 }
 
 let chartSmaFast = 5, chartSmaSlow = 20
@@ -375,6 +391,18 @@ function updateUI(data) {
   }
 }
 
+function updatePlChart() {
+  fetch('/api/pl').then(r=>r.json()).then(d=>{
+    if(!d||!d.equityHistory||!d.equityHistory.length) return
+    const eq=d.equityHistory.map(e=>({time:new Date(e.time).getTime()/1000,value:e.equity}))
+    equityLine.setData(eq)
+    if(d.tradePl&&d.tradePl.length){
+      const cum=d.tradePl.map(t=>({time:new Date(t.time).getTime()/1000,value:t.cumulative}))
+      plLine.setData(cum)
+    }
+  }).catch(()=>{})
+}
+
 document.getElementById('cfgStrategyFamily').addEventListener('change', updateStrategyHint)
 document.getElementById('cfgPair').addEventListener('change', updateStrategyHint)
 initChart(); loadConfig()
@@ -396,6 +424,8 @@ setInterval(async()=>{
     }
   }catch(e){}
 },3000)
+
+setInterval(updatePlChart, 5000)
 </script>
 </body>
 </html>

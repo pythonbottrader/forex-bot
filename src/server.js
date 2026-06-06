@@ -16,6 +16,8 @@ app.get('/api/status', (req, res) => res.json(bot.getInfo()))
 
 app.get('/api/candles', (req, res) => res.json(bot.getCandles()))
 
+app.get('/api/pl', (req, res) => res.json(bot.getPlHistory()))
+
 app.get('/api/config', (req, res) => {
   const c = getBotConfig()
   const botInfo = bot.getInfo()

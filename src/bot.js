@@ -90,6 +90,8 @@ export class Bot {
     this.cfg = getBotConfig()
     this.api = null
     this.strategyFn = null
+    this.equityHistory = []
+    this.initialCapital = 0
   }
 
   _initApi() {
@@ -140,6 +142,24 @@ export class Bot {
     return this.candles.slice(-300)
   }
 
+  getPlHistory() {
+    let cumPl = 0
+    const tradePl = this.trades
+      .filter(t => t.type === 'SELL' && t.pl !== undefined)
+      .map(t => {
+        cumPl += t.pl
+        return { time: t.time, pl: t.pl, cumulative: cumPl }
+      })
+    return {
+      initialCapital: this.initialCapital,
+      currentEquity: this.account.equity,
+      currentBalance: this.account.balance,
+      totalPl: cumPl,
+      tradePl,
+      equityHistory: this.equityHistory.slice(-500)
+    }
+  }
+
   async start() {
     if (this.status === 'running') return
     try {
@@ -187,6 +207,13 @@ export class Bot {
         marginUsed: parseFloat(summary.account.marginUsed),
         marginAvailable: parseFloat(summary.account.marginAvailable)
       }
+      if (this.initialCapital === 0) this.initialCapital = this.account.balance
+      this.equityHistory.push({
+        time: new Date().toISOString(),
+        equity: this.account.equity,
+        balance: this.account.balance
+      })
+      if (this.equityHistory.length > 1000) this.equityHistory.splice(0, 100)
     } catch (err) {
       console.error(`[BOT] Erro conta: ${err.message}`)
     }
