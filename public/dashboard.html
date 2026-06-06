@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forex Bot - OANDA</title>
+<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 20px; }
+h1 { font-size: 18px; margin-bottom: 20px; color: #58a6ff; }
+.container { max-width: 1400px; margin: 0 auto; }
+.grid { display: grid; grid-template-columns: 280px 1fr; gap: 20px; }
+.card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; }
+.card h3 { font-size: 12px; text-transform: uppercase; color: #8b949e; margin-bottom: 8px; }
+.card .val { font-size: 22px; font-weight: 700; }
+.card .label { font-size: 11px; color: #8b949e; margin-top: 2px; }
+.sidebar .stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #21262d; font-size: 13px; }
+.sidebar .stat:last-child { border: none; }
+.sidebar .stat .v { font-weight: 600; }
+.green { color: #3fb950; }
+.red { color: #f85149; }
+.blue { color: #58a6ff; }
+.yellow { color: #d29922; }
+#chart { height: 500px; margin-bottom: 20px; }
+.controls { display: flex; gap: 10px; margin-bottom: 15px; }
+.btn { padding: 8px 20px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 13px; }
+.btn-start { background: #238636; color: #fff; }
+.btn-stop { background: #da3633; color: #fff; }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.trade-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.trade-table th { text-align: left; padding: 6px 8px; color: #8b949e; border-bottom: 1px solid #30363d; }
+.trade-table td { padding: 6px 8px; border-bottom: 1px solid #21262d; }
+.bot-status { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.status-running { background: #3fb950; }
+.status-stopped { background: #f85149; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Forex Bot — OANDA Demo</h1>
+  <div class="controls">
+    <button class="btn btn-start" id="btnStart" onclick="startBot()">Iniciar Bot</button>
+    <button class="btn btn-stop" id="btnStop" onclick="stopBot()" disabled>Parar Bot</button>
+    <span id="statusBadge" style="font-size:13px;align-self:center"><span class="bot-status status-stopped"></span>Parado</span>
+  </div>
+
+  <div class="grid">
+    <div class="sidebar">
+      <div class="card" style="margin-bottom:12px">
+        <h3>Conta</h3>
+        <div class="stat"><span>Saldo</span><span class="v" id="balance">--</span></div>
+        <div class="stat"><span>Equity</span><span class="v" id="equity">--</span></div>
+        <div class="stat"><span>P&L</span><span class="v" id="pl">--</span></div>
+        <div class="stat"><span>Margem</span><span class="v" id="margin">--</span></div>
+      </div>
+      <div class="card" style="margin-bottom:12px">
+        <h3>Config</h3>
+        <div class="stat"><span>Par</span><span class="v" id="cfgPair">--</span></div>
+        <div class="stat"><span>Timeframe</span><span class="v" id="cfgTf">--</span></div>
+        <div class="stat"><span>Estrategia</span><span class="v" id="cfgStrat">--</span></div>
+        <div class="stat"><span>Lote</span><span class="v" id="cfgLot">--</span></div>
+      </div>
+      <div class="card" style="margin-bottom:12px">
+        <h3>Posicao</h3>
+        <div class="stat"><span>Status</span><span class="v" id="posStatus">Fechada</span></div>
+        <div class="stat"><span>Entrada</span><span class="v" id="posEntry">--</span></div>
+        <div class="stat"><span>Atual</span><span class="v" id="posCurrent">--</span></div>
+        <div class="stat"><span>P&L</span><span class="v" id="posPl">--</span></div>
+      </div>
+      <div class="card">
+        <h3>Sinais</h3>
+        <div class="stat"><span>Ultimo Sinal</span><span class="v" id="lastSignal">--</span></div>
+        <div class="stat"><span>Ultima Verif.</span><span class="v" id="lastChecked">--</span></div>
+        <div class="stat"><span>Candles</span><span class="v" id="candleCount">--</span></div>
+        <div class="stat"><span>Trades</span><span class="v" id="tradeCount">--</span></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div id="chart"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:20px">
+    <h3>Historico de Trades</h3>
+    <table class="trade-table">
+      <thead><tr><th>Tipo</th><th>Preco</th><th>Unidades</th><th>P&L</th><th>Data</th></tr></thead>
+      <tbody id="tradeHistory"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+let chart, candleSeries, smaFastLine, smaSlowLine, markers = []
+
+function initChart() {
+  chart = LightweightCharts.createChart(document.getElementById('chart'), {
+    layout: { background: { color: '#0d1117' }, textColor: '#8b949e' },
+    grid: { vertLines: { color: '#21262d' }, horzLines: { color: '#21262d' } },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    timeScale: { timeVisible: true, borderColor: '#30363d' },
+    rightPriceScale: { borderColor: '#30363d' }
+  })
+  candleSeries = chart.addCandlestickSeries({
+    upColor: '#3fb950', downColor: '#f85149',
+    borderUpColor: '#3fb950', borderDownColor: '#f85149',
+    wickUpColor: '#3fb950', wickDownColor: '#f85149'
+  })
+  smaFastLine = chart.addLineSeries({ color: '#58a6ff', lineWidth: 2, title: 'SMA Fast' })
+  smaSlowLine = chart.addLineSeries({ color: '#d29922', lineWidth: 2, title: 'SMA Slow' })
+}
+
+function updateChart(candles) {
+  if (!candles || candles.length === 0) return
+
+  const cs = candles.map(c => ({
+    time: new Date(c.date).getTime() / 1000,
+    open: c.open, high: c.high, low: c.low, close: c.close
+  }))
+  candleSeries.setData(cs)
+
+  const prices = candles.map(c => c.close)
+  const f = sma(prices, 5), s = sma(prices, 20)
+  const fd = [], sd = []
+
+  cs.forEach((c, i) => {
+    if (f[i] !== null) fd.push({ time: c.time, value: f[i] })
+    if (s[i] !== null) sd.push({ time: c.time, value: s[i] })
+  })
+  smaFastLine.setData(fd)
+  smaSlowLine.setData(sd)
+}
+
+function sma(data, period) {
+  const r = []
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) { r.push(null); continue }
+    let sum = 0
+    for (let j = i - period + 1; j <= i; j++) sum += data[j]
+    r.push(sum / period)
+  }
+  return r
+}
+
+function addBuyMarker(time, price) {
+  candleSeries.createPriceLine({ price, color: '#3fb950', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dotted })
+  markers.push({ time, position: 'belowBar', color: '#3fb950', shape: 'arrowUp', text: 'BUY' })
+  candleSeries.setMarkers(markers)
+}
+
+function addSellMarker(time, price) {
+  candleSeries.createPriceLine({ price, color: '#f85149', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dotted })
+  markers.push({ time, position: 'aboveBar', color: '#f85149', shape: 'arrowDown', text: 'SELL' })
+  candleSeries.setMarkers(markers)
+}
+
+function fmt(v) { return typeof v === 'number' ? v.toFixed(2) : v ?? '--' }
+function fmtPrice(v) { return typeof v === 'number' ? v.toFixed(5) : v ?? '--' }
+
+function updateUI(data) {
+  document.getElementById('statusBadge').innerHTML = data.status === 'running'
+    ? '<span class="bot-status status-running"></span>Rodando'
+    : '<span class="bot-status status-stopped"></span>Parado'
+
+  document.getElementById('balance').textContent = '$' + fmt(data.account?.balance)
+  document.getElementById('equity').textContent = '$' + fmt(data.account?.equity)
+  const pl = data.account?.pl || 0
+  document.getElementById('pl').innerHTML = `<span class="${pl >= 0 ? 'green' : 'red'}">$${fmt(pl)}</span>`
+  document.getElementById('margin').textContent = '$' + fmt(data.account?.marginUsed)
+
+  document.getElementById('cfgPair').textContent = data.pair
+  document.getElementById('cfgTf').textContent = data.granularity
+  document.getElementById('cfgStrat').textContent = data.strategy
+  document.getElementById('cfgLot').textContent = data.lotSize
+
+  if (data.position) {
+    document.getElementById('posStatus').innerHTML = '<span class="green">ABERTA</span>'
+    document.getElementById('posEntry').textContent = fmtPrice(data.position.avgPrice)
+    document.getElementById('posCurrent').textContent = fmtPrice(data.position.currentPrice)
+    const posPl = data.position.pl || 0
+    document.getElementById('posPl').innerHTML = `<span class="${posPl >= 0 ? 'green' : 'red'}">$${fmt(posPl)}</span>`
+  } else {
+    document.getElementById('posStatus').textContent = 'Fechada'
+    document.getElementById('posEntry').textContent = '--'
+    document.getElementById('posCurrent').textContent = '--'
+    document.getElementById('posPl').textContent = '--'
+  }
+
+  const sigMap = { '-1': 'VENDA ↑', '0': 'AGUARDANDO', '1': 'COMPRA ↓' }
+  document.getElementById('lastSignal').textContent = sigMap[data.lastSignal] || '--'
+  document.getElementById('lastChecked').textContent = data.lastChecked
+    ? new Date(data.lastChecked).toLocaleString() : '--'
+  document.getElementById('candleCount').textContent = data.candleCount
+  document.getElementById('tradeCount').textContent = data.trades?.length || 0
+
+  const tbody = document.getElementById('tradeHistory')
+  tbody.innerHTML = ''
+  if (data.trades) {
+    const reversed = [...data.trades].reverse()
+    for (const t of reversed) {
+      const tr = document.createElement('tr')
+      const isBuy = t.type === 'BUY'
+      tr.innerHTML = `
+        <td style="color:${isBuy ? '#3fb950' : '#f85149'}">${t.type}</td>
+        <td>${fmtPrice(t.price)}</td>
+        <td>${t.units || 0}</td>
+        <td style="color:${t.pl >= 0 ? '#3fb950' : '#f85149'}">${t.pl ? '$' + fmt(t.pl) : '--'}</td>
+        <td>${new Date(t.time).toLocaleString()}</td>`
+      tbody.appendChild(tr)
+    }
+  }
+}
+
+async function loadStatus() {
+  try {
+    const r = await fetch('/api/status')
+    const data = await r.json()
+    updateUI(data)
+    return data
+  } catch { return null }
+}
+
+async function startBot() {
+  document.getElementById('btnStart').disabled = true
+  document.getElementById('btnStop').disabled = false
+  await fetch('/api/start', { method: 'POST' })
+}
+
+async function stopBot() {
+  document.getElementById('btnStart').disabled = false
+  document.getElementById('btnStop').disabled = true
+  await fetch('/api/stop', { method: 'POST' })
+}
+
+initChart()
+
+setInterval(async () => {
+  const data = await loadStatus()
+  if (data) {
+    const r = await fetch('/api/candles')
+    const candles = await r.json()
+    updateChart(candles)
+
+    if (data.trades) {
+      const last = data.trades[data.trades.length - 1]
+      if (last) {
+        const time = new Date(last.time).getTime() / 1000
+        if (last.type === 'BUY') {
+          addBuyMarker(time, last.price)
+        } else if (last.type === 'SELL') {
+          addSellMarker(time, last.price)
+        }
+      }
+    }
+  }
+}, 3000)
+</script>
+</body>
+</html>
