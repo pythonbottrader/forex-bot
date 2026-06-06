@@ -8,7 +8,9 @@
     "backtest": "node src/index.js",
     "compare": "node src/compare.js",
     "compare-all": "node src/compare-all.js",
+    "start": "node src/server.js",
     "bot": "node src/server.js",
+    "optimize": "node src/optimize.js",
     "test": "node --experimental-test-coverage src/test.js"
   },
   "dependencies": {

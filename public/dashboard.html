@@ -179,6 +179,9 @@ function initChart() {
   smaSlowLine = chart.addLineSeries({ color:'#d29922', lineWidth:2, title:'SMA Slow' })
 }
 
+let chartSmaFast = 5, chartSmaSlow = 20
+let lastConfig = {}
+
 function updateChart(candles) {
   if (!candles || !candles.length) return
   const cs = candles.map(c => ({
@@ -186,7 +189,7 @@ function updateChart(candles) {
   }))
   candleSeries.setData(cs)
   const prices = candles.map(c => c.close)
-  const f = smaCalc(prices,5), s = smaCalc(prices,20)
+  const f = smaCalc(prices, chartSmaFast), s = smaCalc(prices, chartSmaSlow)
   smaFastLine.setData(cs.map((c,i)=>f[i]!==null?{time:c.time,value:f[i]}:null).filter(Boolean))
   smaSlowLine.setData(cs.map((c,i)=>s[i]!==null?{time:c.time,value:s[i]}:null).filter(Boolean))
 }
@@ -215,11 +218,18 @@ function switchTab(id,btn) {
 async function loadConfig() {
   try {
     const r=await fetch('/api/config'); const d=await r.json()
+    lastConfig=d
     if(d.token) document.getElementById('cfgToken').placeholder=d.token
     if(d.accountId) document.getElementById('cfgAccountId').value=d.accountId
     if(d.pair) document.getElementById('cfgPair').value=d.pair
     if(d.granularity) document.getElementById('cfgTf').value=d.granularity
-    document.getElementById('cfgStrategy').value=d.smaFast+','+d.smaSlow
+    if(d.strategy) {
+      document.getElementById('cfgStrategy').value=d.strategy
+      const parts=d.strategy.split(',').map(Number)
+      chartSmaFast=parts[0]; chartSmaSlow=parts[1]
+      smaFastLine.applyOptions({title:'SMA '+chartSmaFast})
+      smaSlowLine.applyOptions({title:'SMA '+chartSmaSlow})
+    }
     if(d.lotSize) document.getElementById('cfgLot').value=String(d.lotSize)
   }catch(e){}
 }
@@ -232,12 +242,15 @@ async function saveConfig() {
     token, accountId:document.getElementById('cfgAccountId').value,
     pair:document.getElementById('cfgPair').value,
     granularity:document.getElementById('cfgTf').value,
-    smaFast:s[0], smaSlow:s[1],
+    strategy:document.getElementById('cfgStrategy').value,
     lotSize:parseFloat(document.getElementById('cfgLot').value)
   }
   try {
     const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
     const d=await r.json()
+    chartSmaFast=s[0]; chartSmaSlow=s[1]
+    smaFastLine.applyOptions({title:'SMA '+chartSmaFast})
+    smaSlowLine.applyOptions({title:'SMA '+chartSmaSlow})
     document.getElementById('configMsg').textContent='Config salva!'
     document.getElementById('cfgToken').value=''
     document.getElementById('cfgToken').placeholder=d.config.token
@@ -287,7 +300,10 @@ function updateUI(data) {
   if(data.config){
     document.getElementById('configTable').innerHTML=
       '<tr><td>Token</td><td>'+data.config.token+'</td></tr>'+
-      '<tr><td>Account ID</td><td>'+data.config.accountId+'</td></tr>'
+      '<tr><td>Account ID</td><td>'+data.config.accountId+'</td></tr>'+
+      '<tr><td>Estrategia</td><td>'+data.strategy+'</td></tr>'+
+      '<tr><td>Pair</td><td>'+data.pair+'</td></tr>'+
+      '<tr><td>Granularity</td><td>'+data.granularity+'</td></tr>'
   }
 
   const tbody=document.getElementById('tradeHistory')

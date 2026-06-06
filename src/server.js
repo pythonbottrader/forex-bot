@@ -4,10 +4,11 @@ config()
 import express from 'express'
 import { Bot, setBotConfig, getBotConfig } from './bot.js'
 
-const PORT = parseInt(process.env.BOT_PORT || '3000')
+const PORT = parseInt(process.env.PORT || process.env.BOT_PORT || '3000')
 const app = express()
 const bot = new Bot()
 
+app.get('/', (req, res) => res.redirect('/dashboard.html'))
 app.use(express.json())
 app.use(express.static('public'))
 
@@ -22,20 +23,30 @@ app.get('/api/config', (req, res) => {
     accountId: c.accountId,
     pair: c.pair,
     granularity: c.granularity,
-    smaFast: c.smaFast,
-    smaSlow: c.smaSlow,
+    strategy: c.smaFast + ',' + c.smaSlow,
     lotSize: c.lotSize
   })
 })
 
 app.post('/api/config', (req, res) => {
+  const strategy = req.body.strategy || (req.body.smaFast
+    ? req.body.smaFast + ',' + req.body.smaSlow
+    : null)
+
+  let smaFast, smaSlow
+  if (strategy) {
+    const parts = strategy.split(',').map(Number)
+    smaFast = parts[0]
+    smaSlow = parts[1] || parts[0] * 4
+  }
+
   const cfg = {
     token: req.body.token || process.env.OANDA_TOKEN,
     accountId: req.body.accountId || process.env.OANDA_ACCOUNT_ID,
     pair: req.body.pair || process.env.BOT_PAIR || 'USD/JPY',
     granularity: req.body.granularity || process.env.BOT_GRANULARITY || 'D',
-    smaFast: parseInt(req.body.smaFast || process.env.BOT_SMA_FAST || '5'),
-    smaSlow: parseInt(req.body.smaSlow || process.env.BOT_SMA_SLOW || '20'),
+    smaFast: smaFast || parseInt(process.env.BOT_SMA_FAST || '5'),
+    smaSlow: smaSlow || parseInt(process.env.BOT_SMA_SLOW || '20'),
     lotSize: parseFloat(req.body.lotSize || process.env.BOT_LOT_SIZE || '0.01')
   }
   setBotConfig(cfg)

@@ -169,7 +169,7 @@ function thresholdCross(value, prev, lower, upper) {
 
 // ─── SMA CROSSOVER STRATEGIES ───────────────────────────
 
-function makeSmaCross(fast, slow, label) {
+export function makeSmaCross(fast, slow, label) {
   return (p, h, l) => {
     const f = sma(p, fast), s = sma(p, slow), sig = []
     for (let i = 0; i < p.length; i++) sig.push(crossover(f, s, i))
@@ -179,7 +179,7 @@ function makeSmaCross(fast, slow, label) {
 
 // ─── EMA CROSSOVER STRATEGIES ───────────────────────────
 
-function makeEmaCross(fast, slow, label) {
+export function makeEmaCross(fast, slow, label) {
   return (p, h, l) => {
     const f = ema(p, fast), s = ema(p, slow), sig = []
     for (let i = 0; i < p.length; i++) sig.push(crossover(f, s, i))
@@ -189,7 +189,7 @@ function makeEmaCross(fast, slow, label) {
 
 // ─── MACD STRATEGIES ────────────────────────────────────
 
-function makeMacdCross(fast, slow, sigPeriod) {
+export function makeMacdCross(fast, slow, sigPeriod) {
   return (p, h, l) => {
     const m = macd(p, fast, slow, sigPeriod), sig = []
     for (let i = 0; i < p.length; i++) sig.push(crossover(m.macd, m.signal, i))
@@ -197,7 +197,7 @@ function makeMacdCross(fast, slow, sigPeriod) {
   }
 }
 
-function makeMacdZeroCross(fast, slow, sigPeriod, useHistogram = true) {
+export function makeMacdZeroCross(fast, slow, sigPeriod, useHistogram = true) {
   return (p, h, l) => {
     const m = macd(p, fast, slow, sigPeriod), sig = []
     for (let i = 0; i < p.length; i++) {
@@ -210,7 +210,7 @@ function makeMacdZeroCross(fast, slow, sigPeriod, useHistogram = true) {
 
 // ─── RSI STRATEGIES ─────────────────────────────────────
 
-function makeRsi(period, oversold, overbought) {
+export function makeRsi(period, oversold, overbought) {
   return (p, h, l) => {
     const r = rsi(p, period), sig = []
     for (let i = 0; i < p.length; i++) sig.push(thresholdCross(r[i], i > 0 ? r[i - 1] : null, oversold, overbought))
@@ -220,7 +220,7 @@ function makeRsi(period, oversold, overbought) {
 
 // ─── STOCHASTIC STRATEGIES ──────────────────────────────
 
-function makeStoch(kPeriod, dPeriod, oversold, overbought) {
+export function makeStoch(kPeriod, dPeriod, oversold, overbought) {
   return (p, h, l) => {
     const s = stochastic(p, h, l, kPeriod, dPeriod), sig = []
     for (let i = 0; i < p.length; i++) sig.push(thresholdCross(s.k[i], i > 0 ? s.k[i - 1] : null, oversold, overbought))
@@ -230,7 +230,7 @@ function makeStoch(kPeriod, dPeriod, oversold, overbought) {
 
 // ─── ADX STRATEGIES ─────────────────────────────────────
 
-function makeAdxCross(period) {
+export function makeAdxCross(period) {
   return (p, h, l) => {
     const a = adx(p, h, l, period), sig = []
     for (let i = 0; i < p.length; i++) {
@@ -246,7 +246,7 @@ function makeAdxCross(period) {
 
 // ─── CCI STRATEGIES ─────────────────────────────────────
 
-function makeCci(period, lower, upper) {
+export function makeCci(period, lower, upper) {
   return (p, h, l) => {
     const c = cci(p, h, l, period), sig = []
     for (let i = 0; i < p.length; i++) sig.push(thresholdCross(c[i], i > 0 ? c[i - 1] : null, lower, upper))
@@ -256,7 +256,7 @@ function makeCci(period, lower, upper) {
 
 // ─── WILLIAMS %R STRATEGIES ─────────────────────────────
 
-function makeWilliams(period, lower, upper) {
+export function makeWilliams(period, lower, upper) {
   return (p, h, l) => {
     const w = williamsR(p, h, l, period), sig = []
     for (let i = 0; i < p.length; i++) sig.push(thresholdCross(w[i], i > 0 ? w[i - 1] : null, lower, upper))
@@ -266,7 +266,7 @@ function makeWilliams(period, lower, upper) {
 
 // ─── COMBINATION STRATEGIES ─────────────────────────────
 
-function makeMacdRsi(macdFast, macdSlow, macdSig, rsiPeriod, rsiLower, rsiUpper) {
+export function makeMacdRsi(macdFast, macdSlow, macdSig, rsiPeriod, rsiLower, rsiUpper) {
   return (p, h, l) => {
     const m = macd(p, macdFast, macdSlow, macdSig)
     const r = rsi(p, rsiPeriod)
@@ -281,7 +281,7 @@ function makeMacdRsi(macdFast, macdSlow, macdSig, rsiPeriod, rsiLower, rsiUpper)
   }
 }
 
-function makeSmaRsi(smaFast, smaSlow, rsiPeriod, rsiThreshold) {
+export function makeSmaRsi(smaFast, smaSlow, rsiPeriod, rsiThreshold) {
   return (p, h, l) => {
     const f = sma(p, smaFast), s = sma(p, smaSlow)
     const r = rsi(p, rsiPeriod)
@@ -296,7 +296,7 @@ function makeSmaRsi(smaFast, smaSlow, rsiPeriod, rsiThreshold) {
   }
 }
 
-function makeTripleMa(short, mid, long) {
+export function makeTripleMa(short, mid, long) {
   return (p, h, l) => {
     const s = sma(p, short), m = sma(p, mid), lg = sma(p, long)
     const sig = []
@@ -312,7 +312,7 @@ function makeTripleMa(short, mid, long) {
   }
 }
 
-function makeBollingerRsi(bollPeriod, bollStd, rsiPeriod, rsiLower, rsiUpper) {
+export function makeBollingerRsi(bollPeriod, bollStd, rsiPeriod, rsiLower, rsiUpper) {
   return (p, h, l) => {
     const mid = sma(p, bollPeriod), r = rsi(p, rsiPeriod), sig = []
     for (let i = 0; i < p.length; i++) {
@@ -328,7 +328,7 @@ function makeBollingerRsi(bollPeriod, bollStd, rsiPeriod, rsiLower, rsiUpper) {
   }
 }
 
-function makeAdxSma(adxPeriod, smaFast, smaSlow, adxThreshold) {
+export function makeAdxSma(adxPeriod, smaFast, smaSlow, adxThreshold) {
   return (p, h, l) => {
     const a = adx(p, h, l, adxPeriod)
     const f = sma(p, smaFast), s = sma(p, smaSlow), sig = []
@@ -343,7 +343,7 @@ function makeAdxSma(adxPeriod, smaFast, smaSlow, adxThreshold) {
   }
 }
 
-function makeStochRsi(kPeriod, dPeriod, rsiPeriod, stochLower, stochUpper, rsiLower, rsiUpper) {
+export function makeStochRsi(kPeriod, dPeriod, rsiPeriod, stochLower, stochUpper, rsiLower, rsiUpper) {
   return (p, h, l) => {
     const s = stochastic(p, h, l, kPeriod, dPeriod)
     const r = rsi(p, rsiPeriod), sig = []
