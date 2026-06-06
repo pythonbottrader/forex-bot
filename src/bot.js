@@ -125,6 +125,7 @@ export class Bot {
       strategyParams: cfg.strategyParams,
       lotSize: cfg.lotSize,
       status: this.status,
+      marketOpen: this.isMarketOpen(),
       position: this.position,
       trades: this.trades.slice(-50),
       lastSignal: this.lastSignal,
@@ -160,6 +161,20 @@ export class Bot {
     }
   }
 
+  isMarketOpen() {
+    const now = new Date()
+    const utcDay = now.getUTCDay()
+    const utcHour = now.getUTCHours()
+    const utcMin = now.getUTCMinutes()
+    const utcTotal = utcHour * 60 + utcMin
+    const openTime = 22 * 60
+    const closeTime = 22 * 60
+    if (utcDay === 6) return false
+    if (utcDay === 0 && utcTotal < openTime) return false
+    if (utcDay === 5 && utcTotal >= closeTime) return false
+    return true
+  }
+
   async start() {
     if (this.status === 'running') return
     try {
@@ -172,10 +187,14 @@ export class Bot {
     this.position = null
     this.candles = []
 
-    await this.updateAccount()
-    await this.updateCandles()
-    await this.checkPosition()
-    await this.evaluate()
+    if (!this.isMarketOpen()) {
+      console.log('[BOT] Mercado fechado. Aguardando abertura...')
+    } else {
+      await this.updateAccount()
+      await this.updateCandles()
+      await this.checkPosition()
+      await this.evaluate()
+    }
 
     this.timer = setInterval(() => this.tick(), 300000)
   }
@@ -187,6 +206,7 @@ export class Bot {
 
   async tick() {
     if (this.status !== 'running') return
+    if (!this.isMarketOpen()) return
     try {
       await this.updateAccount()
       await this.updateCandles()

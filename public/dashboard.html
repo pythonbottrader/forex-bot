@@ -120,6 +120,7 @@ td { padding:6px 8px; border-bottom:1px solid #21262d; }
       <div class="card">
         <h3>Status do Bot</h3>
         <div class="row"><span>Status</span><span class="v" id="sStatus">Parado</span></div>
+        <div class="row"><span>Mercado Forex</span><span class="v" id="sMarket">--</span></div>
         <div class="row"><span>Ultimo Sinal</span><span class="v" id="sSignal">--</span></div>
         <div class="row"><span>Ultima Verificacao</span><span class="v" id="sChecked">--</span></div>
         <div class="row"><span>Candles Carregados</span><span class="v" id="sCandles">--</span></div>
@@ -344,6 +345,8 @@ function updateUI(data) {
     : '<span class="status-dot dot-stopped"></span>Parado'
   document.getElementById('sStatus').innerHTML=data.status==='running'
     ? '<span class="green">Rodando</span>' : '<span class="red">Parado</span>'
+  document.getElementById('sMarket').innerHTML=data.marketOpen
+    ? '<span class="green">Aberto</span>' : '<span class="red">Fechado</span>'
   const sig={'-1':'VENDA','0':'AGUARDANDO','1':'COMPRA'}
   document.getElementById('sSignal').textContent=sig[data.lastSignal]||'--'
   document.getElementById('sChecked').textContent=data.lastChecked?new Date(data.lastChecked).toLocaleString():'--'
