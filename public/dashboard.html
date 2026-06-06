@@ -87,12 +87,26 @@ td { padding:6px 8px; border-bottom:1px solid #21262d; }
           </select>
 
           <label>Estrategia</label>
-          <select id="cfgStrategy">
-            <option value="5,20">SMA 5x20 (recomendado)</option>
-            <option value="9,21">SMA 9x21</option>
-            <option value="10,50">SMA 10x50</option>
-            <option value="20,100">SMA 20x100</option>
+          <select id="cfgStrategyFamily">
+            <option value="rsi">RSI</option>
+            <option value="sma">SMA</option>
+            <option value="ema">EMA</option>
+            <option value="macd">MACD</option>
+            <option value="macdrsi">MACD + RSI</option>
+            <option value="smarsi">SMA + RSI</option>
+            <option value="stoch">Stochastic</option>
+            <option value="adx">ADX</option>
+            <option value="cci">CCI</option>
+            <option value="williams">Williams %R</option>
+            <option value="triplema">Triple MA</option>
+            <option value="bollrsi">Bollinger + RSI</option>
+            <option value="adxsma">ADX + SMA</option>
+            <option value="stochrsi">Stoch + RSI</option>
           </select>
+          <label>Parametros</label>
+          <input id="cfgStrategyParams" placeholder="ex: 19,35,75">
+          <div class="hint">Veja a descricao do par otimizado</div>
+          <div style="font-size:11px;color:#d29922;margin-top:4px" id="strategyHint"></div>
 
           <label>Tamanho do Lote</label>
           <select id="cfgLot">
@@ -215,6 +229,41 @@ function switchTab(id,btn) {
   document.getElementById(id).classList.add('active')
 }
 
+const STRATEGY_HINTS = {
+  sma: 'ex: 5,20  (fast,slow)', ema: 'ex: 7,10  (fast,slow)',
+  macd: 'ex: 12,26,9  (fast,slow,signal)',
+  macdz: 'ex: 12,26,9  (fast,slow,signal)',
+  rsi: 'ex: 19,35,75  (period,oversold,overbought)',
+  stoch: 'ex: 14,3,20,80  (k,d,oversold,overbought)',
+  adx: 'ex: 14  (period)',
+  cci: 'ex: 14,-100,100  (period,lower,upper)',
+  williams: 'ex: 14,-80,-20  (period,lower,upper)',
+  macdrsi: 'ex: 16,17,9,7,50,70  (fast,slow,sig,rsiPeriod,rsiLower,rsiUpper)',
+  smarsi: 'ex: 10,50,14,50  (smaFast,smaSlow,rsiPeriod,threshold)',
+  triplema: 'ex: 5,20,50  (short,mid,long)',
+  bollrsi: 'ex: 20,2,14,30,70  (period,std,rsiPeriod,rsiLower,rsiUpper)',
+  adxsma: 'ex: 14,10,50,25  (adxPeriod,smaFast,smaSlow,threshold)',
+  stochrsi: 'ex: 14,3,14,20,80,30,70  (k,d,rsiPeriod,stochLower,stochUpper,rsiLower,rsiUpper)'
+}
+
+const BEST_PARAMS = {
+  'USD/JPY': { rsi:'19,35,75', macdrsi:'16,17,9,7,50,70', ema:'7,10', sma:'5,20' },
+  'GBP/JPY': { rsi:'19,35,85', macdrsi:'12,35,5,7,50,70', ema:'7,10', sma:'9,20' },
+  'CHF/JPY': { rsi:'9,35,85', sma:'9,20', ema:'9,20' }
+}
+
+function updateStrategyHint() {
+  const family = document.getElementById('cfgStrategyFamily').value
+  const pair = document.getElementById('cfgPair').value
+  const hint = STRATEGY_HINTS[family] || 'parametros separados por virgula'
+  const best = (BEST_PARAMS[pair] || {})[family]
+  document.getElementById('strategyHint').innerHTML =
+    hint + (best ? ' | Melhor: <b>' + best + '</b>' : '')
+  if (best && !document.getElementById('cfgStrategyParams').value) {
+    document.getElementById('cfgStrategyParams').placeholder = best
+  }
+}
+
 async function loadConfig() {
   try {
     const r=await fetch('/api/config'); const d=await r.json()
@@ -223,34 +272,39 @@ async function loadConfig() {
     if(d.accountId) document.getElementById('cfgAccountId').value=d.accountId
     if(d.pair) document.getElementById('cfgPair').value=d.pair
     if(d.granularity) document.getElementById('cfgTf').value=d.granularity
-    if(d.strategy) {
-      document.getElementById('cfgStrategy').value=d.strategy
-      const parts=d.strategy.split(',').map(Number)
-      chartSmaFast=parts[0]; chartSmaSlow=parts[1]
+    if(d.strategyFamily) document.getElementById('cfgStrategyFamily').value=d.strategyFamily
+    if(d.strategyParams) {
+      document.getElementById('cfgStrategyParams').value=d.strategyParams
+      const parts=d.strategyParams.split(',').map(Number)
+      chartSmaFast=parts[0]; chartSmaSlow=parts[1]||parts[0]*2
       smaFastLine.applyOptions({title:'SMA '+chartSmaFast})
       smaSlowLine.applyOptions({title:'SMA '+chartSmaSlow})
     }
     if(d.lotSize) document.getElementById('cfgLot').value=String(d.lotSize)
+    updateStrategyHint()
   }catch(e){}
 }
 
 async function saveConfig() {
   const token=document.getElementById('cfgToken').value
-  const s=document.getElementById('cfgStrategy').value.split(',').map(Number)
+  const family=document.getElementById('cfgStrategyFamily').value
+  const params=document.getElementById('cfgStrategyParams').value || document.getElementById('cfgStrategyParams').placeholder
   if(!token){document.getElementById('configMsg').textContent='Token obrigatorio!';return}
   const body={
     token, accountId:document.getElementById('cfgAccountId').value,
     pair:document.getElementById('cfgPair').value,
     granularity:document.getElementById('cfgTf').value,
-    strategy:document.getElementById('cfgStrategy').value,
+    strategyFamily: family,
+    strategyParams: params,
     lotSize:parseFloat(document.getElementById('cfgLot').value)
   }
   try {
     const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
     const d=await r.json()
-    chartSmaFast=s[0]; chartSmaSlow=s[1]
-    smaFastLine.applyOptions({title:'SMA '+chartSmaFast})
-    smaSlowLine.applyOptions({title:'SMA '+chartSmaSlow})
+    const parts=params.split(',').map(Number)
+    chartSmaFast=parts[0]; chartSmaSlow=parts[1]||parts[0]*2
+    smaFastLine.applyOptions({title:family.toUpperCase()+' '+chartSmaFast})
+    smaSlowLine.applyOptions({title:family.toUpperCase()+' '+chartSmaSlow})
     document.getElementById('configMsg').textContent='Config salva!'
     document.getElementById('cfgToken').value=''
     document.getElementById('cfgToken').placeholder=d.config.token
@@ -321,6 +375,8 @@ function updateUI(data) {
   }
 }
 
+document.getElementById('cfgStrategyFamily').addEventListener('change', updateStrategyHint)
+document.getElementById('cfgPair').addEventListener('change', updateStrategyHint)
 initChart(); loadConfig()
 
 let lastTradeCount=0

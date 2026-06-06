@@ -18,37 +18,34 @@ app.get('/api/candles', (req, res) => res.json(bot.getCandles()))
 
 app.get('/api/config', (req, res) => {
   const c = getBotConfig()
+  const botInfo = bot.getInfo()
   res.json({
     token: c.token ? c.token.substring(0, 8) + '...' : '',
     accountId: c.accountId,
     pair: c.pair,
     granularity: c.granularity,
-    strategy: c.smaFast + ',' + c.smaSlow,
+    strategy: botInfo.strategy,
+    strategyFamily: c.strategyFamily || 'rsi',
+    strategyParams: c.strategyParams || '19,35,75',
     lotSize: c.lotSize
   })
 })
 
 app.post('/api/config', (req, res) => {
-  const strategy = req.body.strategy || (req.body.smaFast
-    ? req.body.smaFast + ',' + req.body.smaSlow
-    : null)
-
-  let smaFast, smaSlow
-  if (strategy) {
-    const parts = strategy.split(',').map(Number)
-    smaFast = parts[0]
-    smaSlow = parts[1] || parts[0] * 4
-  }
+  const family = req.body.strategyFamily || 'sma'
+  const paramsStr = req.body.strategyParams || '5,20'
+  const token = req.body.token || process.env.OANDA_TOKEN
 
   const cfg = {
-    token: req.body.token || process.env.OANDA_TOKEN,
+    token,
     accountId: req.body.accountId || process.env.OANDA_ACCOUNT_ID,
     pair: req.body.pair || process.env.BOT_PAIR || 'USD/JPY',
     granularity: req.body.granularity || process.env.BOT_GRANULARITY || 'D',
-    smaFast: smaFast || parseInt(process.env.BOT_SMA_FAST || '5'),
-    smaSlow: smaSlow || parseInt(process.env.BOT_SMA_SLOW || '20'),
+    strategyFamily: family,
+    strategyParams: paramsStr,
     lotSize: parseFloat(req.body.lotSize || process.env.BOT_LOT_SIZE || '0.01')
   }
+
   setBotConfig(cfg)
 
   if (bot.status === 'running') {
@@ -56,7 +53,14 @@ app.post('/api/config', (req, res) => {
     bot.start().catch(err => console.error(err))
   }
 
-  res.json({ status: 'saved', config: { ...cfg, token: cfg.token ? cfg.token.substring(0, 8) + '...' : '' } })
+  res.json({
+    status: 'saved',
+    config: {
+      ...cfg,
+      strategy: `${family} ${paramsStr}`,
+      token: token ? token.substring(0, 8) + '...' : ''
+    }
+  })
 })
 
 app.post('/api/start', async (req, res) => {

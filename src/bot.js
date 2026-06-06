@@ -2,7 +2,39 @@ import { config } from 'dotenv'
 config()
 
 import { Oanda } from './oanda.js'
-import { sma, SIGNAL } from './strategies.js'
+import { SIGNAL } from './strategies.js'
+import {
+  makeSmaCross, makeEmaCross, makeMacdCross, makeMacdZeroCross,
+  makeRsi, makeStoch, makeAdxCross, makeCci, makeWilliams,
+  makeMacdRsi, makeSmaRsi, makeTripleMa, makeBollingerRsi,
+  makeAdxSma, makeStochRsi
+} from './strategies.js'
+
+const FACTORIES = {
+  sma:        makeSmaCross,
+  ema:        makeEmaCross,
+  macd:       makeMacdCross,
+  macdz:      makeMacdZeroCross,
+  rsi:        makeRsi,
+  stoch:      makeStoch,
+  adx:        makeAdxCross,
+  cci:        makeCci,
+  williams:   makeWilliams,
+  macdrsi:    makeMacdRsi,
+  smarsi:     makeSmaRsi,
+  triplema:   makeTripleMa,
+  bollrsi:    makeBollingerRsi,
+  adxsma:     makeAdxSma,
+  stochrsi:   makeStochRsi
+}
+
+const FAMILY_LABELS = {
+  sma: 'SMA', ema: 'EMA', macd: 'MACD', macdz: 'MACD Zero',
+  rsi: 'RSI', stoch: 'Stoch', adx: 'ADX', cci: 'CCI',
+  williams: 'Williams', macdrsi: 'MACD+RSI', smarsi: 'SMA+RSI',
+  triplema: 'Triple MA', bollrsi: 'Boll+RSI', adxsma: 'ADX+SMA',
+  stochrsi: 'Stoch+RSI'
+}
 
 let savedCfg = null
 
@@ -11,15 +43,38 @@ export function setBotConfig(cfg) {
 }
 
 export function getBotConfig() {
-  return savedCfg || {
+  const def = {
     token: process.env.OANDA_TOKEN || '',
     accountId: process.env.OANDA_ACCOUNT_ID || '',
     pair: process.env.BOT_PAIR || 'USD/JPY',
     granularity: process.env.BOT_GRANULARITY || 'D',
-    smaFast: parseInt(process.env.BOT_SMA_FAST || '5'),
-    smaSlow: parseInt(process.env.BOT_SMA_SLOW || '20'),
     lotSize: parseFloat(process.env.BOT_LOT_SIZE || '0.01')
   }
+  if (savedCfg) {
+    def.token = savedCfg.token || def.token
+    def.accountId = savedCfg.accountId || def.accountId
+    def.pair = savedCfg.pair || def.pair
+    def.granularity = savedCfg.granularity || def.granularity
+    def.lotSize = savedCfg.lotSize ?? def.lotSize
+    def.strategyFamily = savedCfg.strategyFamily || def.strategyFamily
+    def.strategyParams = savedCfg.strategyParams || def.strategyParams
+    def.strategyLabel = savedCfg.strategyLabel || def.strategyLabel
+    return def
+  }
+  def.strategyFamily = process.env.BOT_STRATEGY_FAMILY || 'rsi'
+  def.strategyParams = process.env.BOT_STRATEGY_PARAMS || '19,35,75'
+  def.strategyLabel = 'RSI 19 (35/75)'
+  return def
+}
+
+function buildStrategy(family, paramsStr) {
+  const fn = FACTORIES[family]
+  if (!fn) return null
+  const values = paramsStr.split(',').map(v => {
+    const n = parseFloat(v)
+    return isNaN(n) ? v : n
+  })
+  return fn(...values)
 }
 
 export class Bot {
@@ -34,6 +89,7 @@ export class Bot {
     this.timer = null
     this.cfg = getBotConfig()
     this.api = null
+    this.strategyFn = null
   }
 
   _initApi() {
@@ -45,18 +101,26 @@ export class Bot {
     this.instr = `${base}_${quote}`
     this.granularity = cfg.granularity
     this.lotSize = cfg.lotSize
-    this.smaFast = cfg.smaFast
-    this.smaSlow = cfg.smaSlow
     this.api = new Oanda({ token: cfg.token, accountId: cfg.accountId })
+    this.strategyFn = buildStrategy(cfg.strategyFamily || 'sma', cfg.strategyParams || '5,20')
+    if (!this.strategyFn) {
+      this.strategyFn = makeSmaCross(5, 20)
+      cfg.strategyFamily = 'sma'
+      cfg.strategyParams = '5,20'
+    }
   }
 
   getInfo() {
     const cfg = getBotConfig()
+    const family = cfg.strategyFamily || 'sma'
+    const label = cfg.strategyLabel || `${FAMILY_LABELS[family] || family} ${cfg.strategyParams || ''}`
     return {
       pair: cfg.pair,
       instrument: this.instr || cfg.pair.replace('/', '_'),
       granularity: cfg.granularity,
-      strategy: `SMA ${cfg.smaFast}x${cfg.smaSlow}`,
+      strategy: label,
+      strategyFamily: family,
+      strategyParams: cfg.strategyParams,
       lotSize: cfg.lotSize,
       status: this.status,
       position: this.position,
@@ -86,6 +150,7 @@ export class Bot {
     this.status = 'running'
     this.trades = []
     this.position = null
+    this.candles = []
 
     await this.updateAccount()
     await this.updateCandles()
@@ -129,7 +194,7 @@ export class Bot {
 
   async updateCandles() {
     try {
-      const needed = Math.max(this.smaSlow + 20, 100)
+      const needed = 200
       const data = await this.api.fetchLatestCandles(this.base, this.quote, needed, this.granularity)
       this.candles = data
       this.lastChecked = new Date().toISOString()
@@ -166,26 +231,25 @@ export class Bot {
   }
 
   async evaluate() {
-    if (this.candles.length < this.smaSlow + 2) return
+    if (!this.strategyFn || this.candles.length < 30) return
     const complete = this.candles.filter(c => c.complete)
-    if (complete.length < this.smaSlow + 2) return
+    if (complete.length < 30) return
 
     const prices = complete.map(c => c.close)
-    const fast = sma(prices, this.smaFast)
-    const slow = sma(prices, this.smaSlow)
-    const lastIdx = prices.length - 1
+    const highs = complete.map(c => c.high)
+    const lows = complete.map(c => c.low)
 
-    if (fast[lastIdx] === null || slow[lastIdx] === null) return
-    const prevFast = fast[lastIdx - 1], prevSlow = slow[lastIdx - 1]
+    const signals = this.strategyFn(prices, highs, lows)
+    const lastIdx = signals.length - 1
+    if (lastIdx < 0 || signals[lastIdx] === null || signals[lastIdx] === undefined) return
 
-    if (fast[lastIdx] > slow[lastIdx] && prevFast <= prevSlow) {
-      this.lastSignal = SIGNAL.BUY
-      if (!this.position) await this.enterLong()
-    } else if (fast[lastIdx] < slow[lastIdx] && prevFast >= prevSlow) {
-      this.lastSignal = SIGNAL.SELL
-      if (this.position) await this.exitLong()
-    } else {
-      this.lastSignal = SIGNAL.HOLD
+    const sig = signals[lastIdx]
+    this.lastSignal = sig
+
+    if (sig === SIGNAL.BUY && !this.position) {
+      await this.enterLong()
+    } else if (sig === SIGNAL.SELL && this.position) {
+      await this.exitLong()
     }
   }
 
