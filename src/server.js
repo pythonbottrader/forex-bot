@@ -2,21 +2,59 @@ import { config } from 'dotenv'
 config()
 
 import express from 'express'
-import { Bot } from './bot.js'
+import { Bot, setBotConfig, getBotConfig } from './bot.js'
 
 const PORT = parseInt(process.env.BOT_PORT || '3000')
 const app = express()
 const bot = new Bot()
 
+app.use(express.json())
 app.use(express.static('public'))
 
 app.get('/api/status', (req, res) => res.json(bot.getInfo()))
 
 app.get('/api/candles', (req, res) => res.json(bot.getCandles()))
 
+app.get('/api/config', (req, res) => {
+  const c = getBotConfig()
+  res.json({
+    token: c.token ? c.token.substring(0, 8) + '...' : '',
+    accountId: c.accountId,
+    pair: c.pair,
+    granularity: c.granularity,
+    smaFast: c.smaFast,
+    smaSlow: c.smaSlow,
+    lotSize: c.lotSize
+  })
+})
+
+app.post('/api/config', (req, res) => {
+  const cfg = {
+    token: req.body.token || process.env.OANDA_TOKEN,
+    accountId: req.body.accountId || process.env.OANDA_ACCOUNT_ID,
+    pair: req.body.pair || process.env.BOT_PAIR || 'USD/JPY',
+    granularity: req.body.granularity || process.env.BOT_GRANULARITY || 'D',
+    smaFast: parseInt(req.body.smaFast || process.env.BOT_SMA_FAST || '5'),
+    smaSlow: parseInt(req.body.smaSlow || process.env.BOT_SMA_SLOW || '20'),
+    lotSize: parseFloat(req.body.lotSize || process.env.BOT_LOT_SIZE || '0.01')
+  }
+  setBotConfig(cfg)
+
+  if (bot.status === 'running') {
+    bot.stop()
+    bot.start().catch(err => console.error(err))
+  }
+
+  res.json({ status: 'saved', config: { ...cfg, token: cfg.token ? cfg.token.substring(0, 8) + '...' : '' } })
+})
+
 app.post('/api/start', async (req, res) => {
-  await bot.start()
-  res.json({ status: 'started' })
+  try {
+    await bot.start()
+    res.json({ status: 'started' })
+  } catch (err) {
+    res.status(400).json({ status: 'error', message: err.message })
+  }
 })
 
 app.post('/api/stop', (req, res) => {
@@ -27,9 +65,6 @@ app.post('/api/stop', (req, res) => {
 app.listen(PORT, () => {
   console.log(`\n══════════════════════════════════════════`)
   console.log(`  FOREX BOT - OANDA`)
-  console.log(`  Dashboard: http://localhost:${PORT}`)
-  console.log(`  Par: ${process.env.BOT_PAIR || 'USD/JPY'}`)
-  console.log(`  Estrategia: SMA ${process.env.BOT_SMA_FAST || '5'}x${process.env.BOT_SMA_SLOW || '20'}`)
-  console.log(`  Timeframe: ${process.env.BOT_GRANULARITY || 'D'}`)
+  console.log(`  Dashboard: http://localhost:${PORT}/dashboard.html`)
   console.log(`══════════════════════════════════════════\n`)
 })
